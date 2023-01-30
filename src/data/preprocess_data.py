@@ -66,4 +66,4 @@ if __name__ == "__main__":
     preprocess_data()
 
 # python -m src.data.preprocess_data data/raw/labeled_texts_fixed_binary.csv nationality data/processed/train_nationality.csv data/processed/test_nationality.csv
-# python -m src.data.preprocess_data data/raw/labeled_texts_fixed_binary.csv data/processed nationality families sex limit
+# python -m src.data.preprocess_data data/raw/labeled_texts_fixed.csv data/processed nationality families sex limit
