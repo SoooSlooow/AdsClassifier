@@ -56,8 +56,10 @@ def preprocess_data(input_filepath_df, output_folderpath,
         train_df, test_df = train_test_split(preprocessed_df, test_size=0.2,
                                              random_state=42, shuffle=True,
                                              stratify=preprocessed_df['labels'])
+        full_file_name = label_name + '.csv'
         train_file_name = label_name + '_train.csv'
         test_file_name = label_name + '_test.csv'
+        preprocessed_df.to_csv(os.path.join(output_folderpath, full_file_name), index=False)
         train_df.to_csv(os.path.join(output_folderpath, train_file_name), index=False)
         test_df.to_csv(os.path.join(output_folderpath, test_file_name), index=False)
 
