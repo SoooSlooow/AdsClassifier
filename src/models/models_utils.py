@@ -159,12 +159,13 @@ class BaseClassifier():
         for i in range(2, len(self.idx_to_word)):
             self.vectors[i, :] = self.emb.get_vector(self.idx_to_word[i])
 
-    def fit(self, train_tokens, y_train, test_tokens, y_test,
-            reinitialize=True, stop_epochs=None):
+    def fit(self, train_tokens, y_train, test_tokens=None, y_test=None,
+            reinitialize=True, stop_epochs=None, show_logs=False):
         if reinitialize:
             self.n_of_classes = y_train.nunique()
             self.initialize_nnet()
 
+        self.print_test = test_tokens and y_test
         self.stop_epochs = stop_epochs
         train_scores = []
         self.train_scores_mean = []
@@ -172,12 +173,12 @@ class BaseClassifier():
         self.test_aucs = []
         self.test_f1 = []
         criterion = nn.CrossEntropyLoss()
-        for epoch in tqdm.notebook.tqdm(range(self.epochs)):
+        for epoch in tqdm.tqdm(range(self.epochs)):
             self.epoch = epoch
             self.nnet.train()
             train_batches = self.batch_generator(train_tokens, y_train)
             test_batches = self.batch_generator(test_tokens, y_test)
-            for i, batch in tqdm.notebook.tqdm(
+            for i, batch in tqdm.tqdm(
                     enumerate(train_batches),
                     total=len(train_tokens) // self.batch_size
             ):
@@ -186,24 +187,26 @@ class BaseClassifier():
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                if i % 400 == 0:
+                if show_logs and i % 400 == 0:
                     train_score = criterion(self.nnet(batch['tokens']), batch['labels'])
                     print(train_score.item())
                     train_scores.append(train_score.item())
-            self.train_scores_mean.append(sum(train_scores) / len(train_scores))
-            train_scores = []
-            test_pred_prob = torch.tensor([], device='cpu')
-            with torch.no_grad():
-                for batch in test_batches:
-                    test_batch_pred_prob = self.nnet(batch['tokens'])
-                    test_batch_pred_prob_cpu = test_batch_pred_prob.to('cpu')
-                    test_pred_prob = torch.cat((test_pred_prob, test_batch_pred_prob_cpu), 0)
-            test_score = criterion(test_pred_prob, torch.tensor(y_test.values, device='cpu'))
-            self.test_scores.append(test_score.item())
-            test_pred_probas = F.softmax(test_pred_prob).detach().cpu().numpy()
-            self.test_aucs.append(get_roc_aucs(y_test, test_pred_probas))
-            self.test_f1.append(get_max_f1_score(y_test, test_pred_probas)[0])
-            self.print_metrics()
+            if show_logs:
+                self.train_scores_mean.append(sum(train_scores) / len(train_scores))
+                train_scores = []
+                if self.print_test:
+                    test_pred_prob = torch.tensor([], device='cpu')
+                    with torch.no_grad():
+                        for batch in test_batches:
+                            test_batch_pred_prob = self.nnet(batch['tokens'])
+                            test_batch_pred_prob_cpu = test_batch_pred_prob.to('cpu')
+                            test_pred_prob = torch.cat((test_pred_prob, test_batch_pred_prob_cpu), 0)
+                    test_score = criterion(test_pred_prob, torch.tensor(y_test.values, device='cpu'))
+                    self.test_scores.append(test_score.item())
+                    test_pred_probas = F.softmax(test_pred_prob).detach().cpu().numpy()
+                    self.test_aucs.append(get_roc_aucs(y_test, test_pred_probas))
+                    self.test_f1.append(get_max_f1_score(y_test, test_pred_probas)[0])
+                self.print_metrics()
             if self.early_stopping_check():
                 break
 
@@ -253,47 +256,59 @@ class BaseClassifier():
             }
             yield batch
 
-    def print_metrics(self):
+    def print_metrics(self, print_test=True):
 
         clear_output(True)
-        print(f'epoch {self.epoch}/{self.epochs}')
-        print('auc', self.test_aucs[-1])
-        print('score', self.test_scores[-1])
-        print('f1 score', self.test_f1[-1])
 
-        legend_labels = []
-        if self.n_of_classes > 2:
-            for i in range(self.n_of_classes):
-                legend_labels.append(f'Class {i}')
-        legend_labels.append('General')
+        if self.print_test:
+            print(f'epoch {self.epoch}/{self.epochs}')
+            print('auc', self.test_aucs[-1])
+            print('score', self.test_scores[-1])
+            print('f1 score', self.test_f1[-1])
 
-        plt.figure(figsize=(5, 15))
+            legend_labels = []
+            if self.n_of_classes > 2:
+                for i in range(self.n_of_classes):
+                    legend_labels.append(f'Class {i}')
+            legend_labels.append('General')
 
-        plt.subplot(3, 1, 1)
-        plt.plot(np.arange(self.epoch + 1), self.test_aucs)
-        plt.grid()
-        plt.title('Test ROC AUC')
-        plt.xlabel('Num. of epochs')
-        plt.ylabel('ROC AUC')
-        plt.legend(legend_labels)
+            plt.figure(figsize=(5, 15))
 
-        plt.subplot(3, 1, 2)
-        plt.plot(np.arange(self.epoch + 1), self.test_f1)
-        plt.grid()
-        plt.title('Test F1-score')
-        plt.xlabel('Num. of epochs')
-        plt.ylabel('F1-score')
-        plt.legend(legend_labels)
+            plt.subplot(3, 1, 1)
+            plt.plot(np.arange(self.epoch + 1), self.test_aucs)
+            plt.grid()
+            plt.title('Test ROC AUC')
+            plt.xlabel('Num. of epochs')
+            plt.ylabel('ROC AUC')
+            plt.legend(legend_labels)
 
-        plt.subplot(3, 1, 3)
-        plt.plot(np.arange(self.epoch + 1), self.train_scores_mean, label='Train loss')
-        plt.plot(np.arange(self.epoch + 1), self.test_scores, label='Test loss')
-        plt.title('Loss')
-        plt.xlabel('Num. of epochs')
-        plt.ylabel('Loss')
-        plt.legend()
-        plt.grid()
-        plt.show()
+            plt.subplot(3, 1, 2)
+            plt.plot(np.arange(self.epoch + 1), self.test_f1)
+            plt.grid()
+            plt.title('Test F1-score')
+            plt.xlabel('Num. of epochs')
+            plt.ylabel('F1-score')
+            plt.legend(legend_labels)
+
+            plt.subplot(3, 1, 3)
+            plt.plot(np.arange(self.epoch + 1), self.train_scores_mean, label='Train loss')
+            plt.plot(np.arange(self.epoch + 1), self.test_scores, label='Test loss')
+            plt.title('Loss')
+            plt.xlabel('Num. of epochs')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.grid()
+            plt.show()
+
+        else:
+            plt.figure(figsize=(5, 15))
+            plt.plot(np.arange(self.epoch + 1), self.train_scores_mean, label='Train loss')
+            plt.title('Loss')
+            plt.xlabel('Num. of epochs')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.grid()
+            plt.show()
 
     def early_stopping_check(self):
         if self.stop_epochs is None or self.stop_epochs >= len(self.test_scores):
@@ -328,8 +343,7 @@ class RNNClassifier(BaseClassifier):
 
 class DBERTClassifier(BaseClassifier):
 
-    def __init__(self, batch_size=16, epochs=100,
-                 num_layers=1, bidirectional=False):
+    def __init__(self, batch_size=16, epochs=100):
         self.batch_size = batch_size
         self.epochs = epochs
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -382,25 +396,26 @@ class DBERTClassifier(BaseClassifier):
             }
             yield batch
 
-    def fit(self, train_tokens, y_train, test_tokens, y_test,
-            reinitialize=True, stop_epochs=None):
+    def fit(self, train_tokens, y_train, test_tokens=None, y_test=None,
+            reinitialize=True, stop_epochs=None, show_logs=False):
         if reinitialize:
             self.n_of_classes = y_train.nunique()
             self.initialize_nnet()
 
         self.stop_epochs = stop_epochs
+        self.print_test = test_tokens and y_test
         train_scores = []
         self.train_scores_mean = []
         self.test_scores = []
         self.test_aucs = []
         self.test_f1 = []
         criterion = nn.CrossEntropyLoss()
-        for epoch in tqdm.notebook.tqdm(range(self.epochs)):
+        for epoch in tqdm.tqdm(range(self.epochs)):
             self.epoch = epoch
             self.nnet.train()
             train_batches = self.batch_generator(train_tokens, y_train)
             test_batches = self.batch_generator(test_tokens, y_test)
-            for i, batch in tqdm.notebook.tqdm(
+            for i, batch in tqdm.tqdm(
                     enumerate(train_batches),
                     total=len(train_tokens) // self.batch_size
             ):
@@ -409,27 +424,27 @@ class DBERTClassifier(BaseClassifier):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                if i % 400 == 0:
+                if show_logs and i % 400 == 0:
                     train_score = criterion(self.nnet(batch['tokens'], batch['mask'], batch['token_type_ids']),
                                             batch['labels'])
                     print(train_score.item())
                     train_scores.append(train_score.item())
-            self.train_scores_mean.append(sum(train_scores) / len(train_scores))
-            train_scores = []
-            test_pred_prob = torch.tensor([], device='cpu')
-            c = 0
-            with torch.no_grad():
-                for batch in test_batches:
-                    test_batch_pred_prob = self.nnet(batch['tokens'], batch['mask'], batch['token_type_ids'])
-                    test_batch_pred_prob_cpu = test_batch_pred_prob.to('cpu')
-                    test_pred_prob = torch.cat((test_pred_prob, test_batch_pred_prob_cpu), 0)
-                test_score = criterion(test_pred_prob, torch.tensor(y_test.values, device='cpu'))
-                self.test_scores.append(test_score.item())
-                test_pred_probas = F.softmax(test_pred_prob).detach().cpu().numpy()
-                test_pred_labels = np.argmax(test_pred_probas, axis=1)
-                self.test_aucs.append(get_roc_aucs(y_test, test_pred_probas))
-                self.test_f1.append(get_max_f1_score(y_test, test_pred_probas)[0])
-                self.print_metrics()
+            if show_logs:
+                self.train_scores_mean.append(sum(train_scores) / len(train_scores))
+                train_scores = []
+                if self.print_test:
+                    test_pred_prob = torch.tensor([], device='cpu')
+                    with torch.no_grad():
+                        for batch in test_batches:
+                            test_batch_pred_prob = self.nnet(batch['tokens'], batch['mask'], batch['token_type_ids'])
+                            test_batch_pred_prob_cpu = test_batch_pred_prob.to('cpu')
+                            test_pred_prob = torch.cat((test_pred_prob, test_batch_pred_prob_cpu), 0)
+                        test_score = criterion(test_pred_prob, torch.tensor(y_test.values, device='cpu'))
+                        self.test_scores.append(test_score.item())
+                        test_pred_probas = F.softmax(test_pred_prob).detach().cpu().numpy()
+                        self.test_aucs.append(get_roc_aucs(y_test, test_pred_probas))
+                        self.test_f1.append(get_max_f1_score(y_test, test_pred_probas)[0])
+                    self.print_metrics()
                 if self.early_stopping_check():
                     break
 
