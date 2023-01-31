@@ -275,7 +275,7 @@ class BaseClassifier():
             plt.figure(figsize=(5, 15))
 
             plt.subplot(3, 1, 1)
-            plt.plot(np.arange(self.epoch + 1), self.test_aucs)
+            plt.plot(np.arange(1, self.epoch + 2), self.test_aucs)
             plt.grid()
             plt.title('Test ROC AUC')
             plt.xlabel('Num. of epochs')
@@ -283,7 +283,7 @@ class BaseClassifier():
             plt.legend(legend_labels)
 
             plt.subplot(3, 1, 2)
-            plt.plot(np.arange(self.epoch + 1), self.test_f1)
+            plt.plot(np.arange(1, self.epoch + 2), self.test_f1)
             plt.grid()
             plt.title('Test F1-score')
             plt.xlabel('Num. of epochs')
@@ -291,8 +291,8 @@ class BaseClassifier():
             plt.legend(legend_labels)
 
             plt.subplot(3, 1, 3)
-            plt.plot(np.arange(self.epoch + 1), self.train_scores_mean, label='Train loss')
-            plt.plot(np.arange(self.epoch + 1), self.test_scores, label='Test loss')
+            plt.plot(np.arange(1, self.epoch + 2), self.train_scores_mean, label='Train loss')
+            plt.plot(np.arange(1, self.epoch + 2), self.test_scores, label='Test loss')
             plt.title('Loss')
             plt.xlabel('Num. of epochs')
             plt.ylabel('Loss')
@@ -302,7 +302,7 @@ class BaseClassifier():
 
         else:
             plt.figure(figsize=(5, 15))
-            plt.plot(np.arange(self.epoch + 1), self.train_scores_mean, label='Train loss')
+            plt.plot(np.arange(1, self.epoch + 2), self.train_scores_mean, label='Train loss')
             plt.title('Loss')
             plt.xlabel('Num. of epochs')
             plt.ylabel('Loss')
