@@ -9,13 +9,11 @@ import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score, precision_recall_curve
 import tqdm
 from copy import deepcopy
-from IPython.display import clear_output
 import matplotlib.pyplot as plt
 from transformers import DistilBertTokenizer, DistilBertModel
 
 
 def print_metrics(epoch, test_aucs, train_scores_mean, test_scores):
-    clear_output(True)
     print(f'epoch {epoch}/100')
     print('auc', test_aucs[-1])
     print('score', test_scores[-1])
@@ -245,8 +243,6 @@ class BaseClassifier():
             yield batch
 
     def print_metrics(self, print_test=True):
-
-        clear_output(True)
 
         if self.print_test:
             print(f'epoch {self.epoch}/{self.epochs}')
