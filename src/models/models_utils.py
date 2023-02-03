@@ -1,28 +1,16 @@
-import gensim
+import pickle
 import numpy as np
 import pandas as pd
 from gensim.models import KeyedVectors
-from gensim.models import Word2Vec
-from nltk.tokenize import WordPunctTokenizer
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 from collections import Counter
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, precision_recall_curve
-from sklearn.metrics import f1_score
 import tqdm
 from copy import deepcopy
 from IPython.display import clear_output
 import matplotlib.pyplot as plt
-import pymorphy2
-import nltk
-from nltk.corpus import stopwords
-import string
-from transformers import BertTokenizer, BertModel
 from transformers import DistilBertTokenizer, DistilBertModel
 
 
@@ -319,10 +307,6 @@ class BaseClassifier():
             last_scores = np.array(self.test_scores)[-self.stop_epochs:]
             return np.all(last_scores >= first_score)
 
-    def save_model(self, output_filepath):
-        torch.save(self.nnet.state_dict(), output_filepath)
-
-
 class RNNClassifier(BaseClassifier):
 
     def __init__(self, batch_size=16, epochs=100,
@@ -339,6 +323,19 @@ class RNNClassifier(BaseClassifier):
                         num_layers=self.num_layers,
                         bidirectional=self.bidirectional).to(self.device)
         self.optimizer = torch.optim.Adam(self.nnet.parameters())
+
+    def save_model(self, filepath):
+        parameters = dict()
+        parameters['gru'] = dict()
+        parameters['linear'] = dict()
+        gru_dict = self.nnet.gru.state_dict()
+        for param_gru in gru_dict:
+            parameters['gru'][param_gru] = gru_dict[param_gru]
+        linear_dict = self.nnet.linear.state_dict()
+        for param_linear in linear_dict:
+            parameters['linear'][param_linear] = linear_dict[param_linear]
+        with open(filepath, 'wb') as file:
+            pickle.dump(parameters, file)
 
 
 class DBERTClassifier(BaseClassifier):
@@ -460,3 +457,12 @@ class DBERTClassifier(BaseClassifier):
 
     def predict(self, tokens, labels):
         return np.argmax(self.predict_proba(tokens, labels), axis=1)
+
+    def save_model(self, filepath):
+        parameters = dict()
+        parameters['linear'] = dict()
+        linear_dict = self.nnet.linear.state_dict()
+        for param_linear in linear_dict:
+            parameters['linear'][param_linear] = linear_dict[param_linear]
+        with open(filepath, 'wb') as file:
+            pickle.dump(parameters, file)
