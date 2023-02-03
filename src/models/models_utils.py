@@ -13,37 +13,6 @@ import matplotlib.pyplot as plt
 from transformers import DistilBertTokenizer, DistilBertModel
 
 
-def print_metrics(epoch, test_aucs, train_scores_mean, test_scores):
-    print(f'epoch {epoch}/100')
-    print('auc', test_aucs[-1])
-    print('score', test_scores[-1])
-
-    legend_labels = []
-    if type(test_aucs[0]) == list:
-        for i in range(len(test_aucs[0]) - 1):
-            legend_labels.append(f'Class {i}')
-    legend_labels.append('General')
-
-    plt.figure(figsize=(5, 10))
-
-    plt.subplot(2, 1, 1)
-    plt.plot(np.arange(epoch + 1), test_aucs)
-    plt.grid()
-    plt.title('Test ROC AUC')
-    plt.xlabel('Num. of epochs')
-    plt.ylabel('ROC AUC')
-    plt.legend(legend_labels)
-    plt.subplot(2, 1, 2)
-    plt.plot(np.arange(epoch + 1), train_scores_mean, label='Train loss')
-    plt.plot(np.arange(epoch + 1), test_scores, label='Test loss')
-    plt.title('Loss')
-    plt.xlabel('Num. of epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.grid()
-    plt.show()
-
-
 def get_roc_aucs(y, probas):
     y_onehot = pd.get_dummies(y)
     roc_auc_scores = []
@@ -258,6 +227,8 @@ class BaseClassifier():
 
             plt.figure(figsize=(5, 15))
 
+            plt.clf()
+
             plt.subplot(3, 1, 1)
             plt.plot(np.arange(1, self.epoch + 2), self.test_aucs)
             plt.grid()
@@ -282,7 +253,7 @@ class BaseClassifier():
             plt.ylabel('Loss')
             plt.legend()
             plt.grid()
-            plt.show()
+            plt.draw()
 
         else:
             plt.figure(figsize=(5, 15))
@@ -302,6 +273,7 @@ class BaseClassifier():
             first_score = np.array(self.test_scores)[-self.stop_epochs - 1]
             last_scores = np.array(self.test_scores)[-self.stop_epochs:]
             return np.all(last_scores >= first_score)
+
 
 class RNNClassifier(BaseClassifier):
 
