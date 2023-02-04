@@ -38,12 +38,7 @@ def train_rnn(output_filepath, input_train_data_filepath, input_test_data_filepa
     clf.fit(train_tokens, train_labels, test_tokens, test_labels)
     clf.save_model(output_filepath)
 
-
-@click.command()
-@click.argument("output_folderpath", type=click.Path(exists=True))
-@click.argument("input_train_data_folderpath", type=click.Path())
-@click.argument("input_test_data_folderpath", type=click.Path(), default='None')
-def train_models(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
+def train_nationality(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
     output_filepath = os.path.join(output_folderpath, 'nationality.pkl')
     input_train_data_filepath = os.path.join(
         input_train_data_folderpath,
@@ -57,6 +52,63 @@ def train_models(output_folderpath, input_train_data_folderpath, input_test_data
     else:
         input_test_data_filepath = None
     train_dbert(output_filepath, input_train_data_filepath, input_test_data_filepath)
+
+def train_families(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
+    output_filepath = os.path.join(output_folderpath, 'families.pkl')
+    input_train_data_filepath = os.path.join(
+        input_train_data_folderpath,
+        'families.csv'
+    )
+    if input_test_data_folderpath != 'None':
+        input_test_data_filepath = os.path.join(
+            input_test_data_folderpath,
+            'families.csv'
+        )
+    else:
+        input_test_data_filepath = None
+    train_dbert(output_filepath, input_train_data_filepath, input_test_data_filepath)
+
+def train_sex(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
+    output_filepath = os.path.join(output_folderpath, 'sex.pkl')
+    input_train_data_filepath = os.path.join(
+        input_train_data_folderpath,
+        'sex.csv'
+    )
+    if input_test_data_folderpath != 'None':
+        input_test_data_filepath = os.path.join(
+            input_test_data_folderpath,
+            'sex.csv'
+        )
+    else:
+        input_test_data_filepath = None
+    train_dbert(output_filepath, input_train_data_filepath, input_test_data_filepath)
+
+
+def train_limit(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
+    output_filepath = os.path.join(output_folderpath, 'limit.pkl')
+    input_train_data_filepath = os.path.join(
+        input_train_data_folderpath,
+        'limit.csv'
+    )
+    if input_test_data_folderpath != 'None':
+        input_test_data_filepath = os.path.join(
+            input_test_data_folderpath,
+            'limit.csv'
+        )
+    else:
+        input_test_data_filepath = None
+    train_rnn(output_filepath, input_train_data_filepath, input_test_data_filepath)
+
+
+@click.command()
+@click.argument("output_folderpath", type=click.Path(exists=True))
+@click.argument("input_train_data_folderpath", type=click.Path())
+@click.argument("input_test_data_folderpath", type=click.Path(), default='None')
+def train_models(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
+    train_nationality(output_folderpath, input_train_data_folderpath, input_test_data_folderpath)
+    train_families(output_folderpath, input_train_data_folderpath, input_test_data_folderpath)
+    train_sex(output_folderpath, input_train_data_folderpath, input_test_data_folderpath)
+    train_limit(output_folderpath, input_train_data_folderpath, input_test_data_folderpath)
 
 
 if __name__ == "__main__":
