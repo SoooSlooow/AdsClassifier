@@ -19,6 +19,14 @@ def get_train_test_data(input_train_data_filepath, input_test_data_filepath):
     return train_tokens, train_labels, test_tokens, test_labels
 
 
+def make_filepath(folderpath, filename):
+    if folderpath != 'None':
+        filepath = os.path.join(folderpath, filename)
+    else:
+        filepath = None
+    return filepath
+
+
 def train_dbert(output_filepath, input_train_data_filepath, input_test_data_filepath):
     train_tokens, train_labels, test_tokens, test_labels = get_train_test_data(
         input_train_data_filepath,
@@ -38,65 +46,32 @@ def train_rnn(output_filepath, input_train_data_filepath, input_test_data_filepa
     clf.fit(train_tokens, train_labels, test_tokens, test_labels)
     clf.save_model(output_filepath)
 
+
 def train_nationality(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
     output_filepath = os.path.join(output_folderpath, 'nationality.pkl')
-    input_train_data_filepath = os.path.join(
-        input_train_data_folderpath,
-        'nationality.csv'
-    )
-    if input_test_data_folderpath != 'None':
-        input_test_data_filepath = os.path.join(
-            input_test_data_folderpath,
-            'nationality.csv'
-        )
-    else:
-        input_test_data_filepath = None
+    input_train_data_filepath = make_filepath(input_train_data_folderpath, 'nationality.csv')
+    input_test_data_filepath = make_filepath(input_test_data_folderpath, 'nationality.csv')
     train_dbert(output_filepath, input_train_data_filepath, input_test_data_filepath)
+
 
 def train_families(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
     output_filepath = os.path.join(output_folderpath, 'families.pkl')
-    input_train_data_filepath = os.path.join(
-        input_train_data_folderpath,
-        'families.csv'
-    )
-    if input_test_data_folderpath != 'None':
-        input_test_data_filepath = os.path.join(
-            input_test_data_folderpath,
-            'families.csv'
-        )
-    else:
-        input_test_data_filepath = None
+    input_train_data_filepath = make_filepath(input_train_data_folderpath, 'families.csv')
+    input_test_data_filepath = make_filepath(input_test_data_folderpath, 'families.csv')
     train_dbert(output_filepath, input_train_data_filepath, input_test_data_filepath)
+
 
 def train_sex(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
     output_filepath = os.path.join(output_folderpath, 'sex.pkl')
-    input_train_data_filepath = os.path.join(
-        input_train_data_folderpath,
-        'sex.csv'
-    )
-    if input_test_data_folderpath != 'None':
-        input_test_data_filepath = os.path.join(
-            input_test_data_folderpath,
-            'sex.csv'
-        )
-    else:
-        input_test_data_filepath = None
+    input_train_data_filepath = make_filepath(input_train_data_folderpath, 'sex.csv')
+    input_test_data_filepath = make_filepath(input_test_data_folderpath, 'sex.csv')
     train_dbert(output_filepath, input_train_data_filepath, input_test_data_filepath)
 
 
 def train_limit(output_folderpath, input_train_data_folderpath, input_test_data_folderpath):
     output_filepath = os.path.join(output_folderpath, 'limit.pkl')
-    input_train_data_filepath = os.path.join(
-        input_train_data_folderpath,
-        'limit.csv'
-    )
-    if input_test_data_folderpath != 'None':
-        input_test_data_filepath = os.path.join(
-            input_test_data_folderpath,
-            'limit.csv'
-        )
-    else:
-        input_test_data_filepath = None
+    input_train_data_filepath = make_filepath(input_train_data_folderpath, 'limit.csv')
+    input_test_data_filepath = make_filepath(input_test_data_folderpath, 'limit.csv')
     train_rnn(output_filepath, input_train_data_filepath, input_test_data_filepath)
 
 
