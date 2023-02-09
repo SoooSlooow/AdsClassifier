@@ -1,3 +1,4 @@
+import os
 import pickle
 import numpy as np
 import pandas as pd
@@ -75,7 +76,7 @@ class DistilBERTClass(torch.nn.Module):
         return output
 
 
-class BaseClassifier():
+class BaseClassifier:
 
     def __init__(self, batch_size=16, epochs=100):
         self.batch_size = batch_size
@@ -434,3 +435,167 @@ class DBERTClassifier(BaseClassifier):
             parameters['linear'][param_linear] = linear_dict[param_linear]
         with open(filepath, 'wb') as file:
             pickle.dump(parameters, file)
+
+
+class AdsClassifierNN(nn.Module):
+
+    def __init__(self, weights_folder):
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        super().__init__()
+
+        weights_nationality_path = os.path.join(weights_folder, 'model_nationality.pt')
+        weights_families_path = os.path.join(weights_folder, 'model_families.pt')
+        weights_sex_path = os.path.join(weights_folder, 'model_sex.pt')
+        weights_limit_path = os.path.join(weights_folder, 'model_limit.pt')
+
+        weights_limit = torch.load(weights_limit_path, map_location=device)
+        weights_nationality = torch.load(weights_nationality_path, map_location=device)
+        weights_families = torch.load(weights_families_path, map_location=device)
+        weights_sex = torch.load(weights_sex_path, map_location=device)
+
+        dim = weights_limit['emb']['weight'].shape[1]
+        num_layers = 1
+        bidirectional = True
+        d = 2 if bidirectional else 1
+
+        self.emb = nn.Embedding(weights_limit['emb']['weight'].shape[0], dim)
+        self.emb.load_state_dict(weights_limit['emb'])
+        self.gru = nn.GRU(input_size=dim, hidden_size=dim, batch_first=True,
+                          num_layers=num_layers, bidirectional=bidirectional)
+        self.gru.load_state_dict(weights_limit['gru'])
+        self.linear_limit = nn.Linear(dim * num_layers * d, 2)
+        self.linear_limit.load_state_dict(weights_limit['linear'])
+
+        self.dbert = DistilBertModel.from_pretrained('DeepPavlov/distilrubert-small-cased-conversational')
+        self.linear_nationality = nn.Linear(768, 2)
+        self.linear_nationality.load_state_dict(weights_nationality['linear'])
+        self.linear_families = nn.Linear(768, 2)
+        self.linear_families.load_state_dict(weights_families['linear'])
+        self.linear_sex = nn.Linear(768, 2)
+        self.linear_sex.load_state_dict(weights_sex['linear'])
+
+    def forward(self, input_ids, attention_mask, input_ids_rnn):
+        dbert_output = self.dbert(input_ids=input_ids, attention_mask=attention_mask)
+        hidden_state = dbert_output[0]
+        pooler = hidden_state[:, 0]
+        output_nationality = self.linear_nationality(pooler)
+        output_families = self.linear_families(pooler)
+        output_sex = self.linear_sex(pooler)
+
+        emb = self.emb(input_ids_rnn)
+        _, last_state = self.gru(emb)
+        last_state = torch.permute(last_state, (1, 0, 2)).reshape(1, input_ids.shape[0], -1).squeeze()
+        output_limit = self.linear_limit(last_state.squeeze())
+        if len(output_limit.size()) == 1:
+            output_limit = output_limit.unsqueeze(0)
+
+        res = {
+            'nationality': output_nationality,
+            'families': output_families,
+            'sex': output_sex,
+            'limit': output_limit
+        }
+        return res
+
+
+class AdClassifier:
+
+    def __init__(self, weights_folder, dictionary_path):
+        self.batch_size = 16
+
+        with open(dictionary_path, 'rb') as file:
+            self.word_to_idx = pickle.load(file)
+
+        self.unk_idx = 1
+        self.pad_idx = 0
+
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        self.nn = AdsClassifierNN(weights_folder)
+        self.tokenizer = DistilBertTokenizer.from_pretrained(
+            'DeepPavlov/distilrubert-small-cased-conversational',
+            do_lower_case=True
+        )
+
+    def index_tokens(self, tokens_string):
+        return [self.word_to_idx.get(token, self.unk_idx) for token in tokens_string]
+
+    def fill_with_pads(self, tokens):
+        tokens = deepcopy(tokens)
+        max_len = 0
+        for tokens_string in tokens:
+            max_len = max(max_len, len(tokens_string))
+        for tokens_string in tokens:
+            for i in range(len(tokens_string), max_len):
+                tokens_string.append(self.pad_idx)
+        return tokens
+
+    def as_matrix(self, tokens):
+        tokens = deepcopy(tokens)
+        for j, s in enumerate(tokens):
+            tokens[j] = self.index_tokens(s)
+        tokens = self.fill_with_pads(tokens)
+        return tokens
+
+    def batch_generator(self, tokens):
+        for i in range(0, len(tokens), self.batch_size):
+            batch_tokens = tokens[i: i + self.batch_size]
+            batch_tokens = [' '.join(s) for s in batch_tokens]
+            if len(batch_tokens) == 1:
+                inputs = self.tokenizer.encode_plus(
+                    batch_tokens,
+                    None,
+                    add_special_tokens=True,
+                    max_length=512,
+                    truncation=True,
+                    pad_to_max_length=True,
+                    return_token_type_ids=True
+                )
+            else:
+                inputs = self.tokenizer.batch_encode_plus(
+                    batch_tokens,
+                    add_special_tokens=True,
+                    max_length=512,
+                    truncation=True,
+                    pad_to_max_length=True,
+                    return_token_type_ids=True
+                )
+            batch_token_ids = torch.tensor(inputs['input_ids'], device=self.device, dtype=torch.long)
+            batch_mask = torch.tensor(inputs['attention_mask'], device=self.device, dtype=torch.long)
+            batch_token_type_ids = torch.tensor(inputs['token_type_ids'], device=self.device, dtype=torch.long)
+
+            batch_tokens_rnn = tokens[i: i + self.batch_size]
+            batch_tokens_rnn_ids = torch.tensor(self.as_matrix(batch_tokens_rnn),
+                                                dtype=torch.int,
+                                                device=self.device)
+
+            if len(batch_tokens) == 1:
+                batch_token_ids = batch_token_ids.unsqueeze(0)
+                batch_mask = batch_mask.unsqueeze(0)
+                batch_token_type_ids = batch_token_type_ids.unsqueeze(0)
+                batch_tokens_rnn_ids = torch.unsqueeze(batch_tokens_rnn_ids, 0)
+            batch = {
+                'tokens': batch_token_ids,
+                'mask': batch_mask,
+                'token_type_ids': batch_token_type_ids,
+                'tokens_rnn': batch_tokens_rnn_ids
+            }
+            yield batch
+
+    def predict_probas(self, tokens):
+        batches = self.batch_generator(tokens)
+        pred_probas = {'nationality': torch.tensor([], device=self.device),
+                       'families': torch.tensor([], device=self.device),
+                       'sex': torch.tensor([], device=self.device),
+                       'limit': torch.tensor([], device=self.device)}
+        with torch.no_grad():
+            for batch in batches:
+                batch_probas = self.nn(batch['tokens'], batch['mask'], batch['tokens_rnn'])
+                for batch_prob_label in batch_probas:
+                    pred_probas[batch_prob_label] = torch.cat((pred_probas[batch_prob_label],
+                                                               batch_probas[batch_prob_label]))
+                for pred_prob_label in pred_probas:
+                    pred_probas[pred_prob_label] = F.softmax(pred_probas[pred_prob_label]). \
+                        detach().cpu().numpy()
+        return pred_probas
