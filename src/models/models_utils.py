@@ -599,3 +599,7 @@ class AdClassifier:
                     pred_probas[pred_prob_label] = F.softmax(pred_probas[pred_prob_label]). \
                         detach().cpu().numpy()
         return pred_probas
+
+    def save_model(self, filepath):
+        with open(filepath, 'wb') as file:
+            pickle.dump(self, file)
