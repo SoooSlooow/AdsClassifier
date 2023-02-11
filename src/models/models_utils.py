@@ -153,6 +153,7 @@ class BaseClassifier:
                 if self.print_test:
                     test_pred_prob = torch.tensor([], device='cpu')
                     with torch.no_grad():
+                        self.nnet.eval()
                         for batch in test_batches:
                             test_batch_pred_prob = self.nnet(batch['tokens'])
                             test_batch_pred_prob_cpu = test_batch_pred_prob.to('cpu')
@@ -193,12 +194,15 @@ class BaseClassifier:
         tokens = self.fill_with_pads(tokens)
         return tokens
 
-    def batch_generator(self, tokens, labels):
+    def batch_generator(self, tokens, labels=None):
         for i in range(0, len(tokens), self.batch_size):
             batch_tokens = tokens[i: i + self.batch_size]
-            batch_labels = torch.tensor(labels.values[i: i + self.batch_size],
-                                        dtype=torch.long,
-                                        device=self.device)
+            if labels:
+                batch_labels = torch.tensor(labels.values[i: i + self.batch_size],
+                                            dtype=torch.long,
+                                            device=self.device)
+            else:
+                batch_labels = None
 
             batch_tokens_idx = torch.tensor(self.as_matrix(batch_tokens),
                                             dtype=torch.int,
@@ -275,6 +279,16 @@ class BaseClassifier:
             last_scores = np.array(self.test_scores)[-self.stop_epochs:]
             return np.all(last_scores >= first_score)
 
+    def predict_proba(self, tokens, labels):
+        batches = self.batch_generator(tokens, labels)
+        pred_probas = torch.tensor([], device=self.device)
+        with torch.no_grad():
+            self.nnet.eval()
+            for batch in batches:
+                batch_prob = self.nnet(batch['tokens'])
+                pred_probas = torch.cat((pred_probas, batch_prob))
+        return F.softmax(pred_probas).detach().cpu().numpy()
+
 
 class RNNClassifier(BaseClassifier):
 
@@ -294,17 +308,15 @@ class RNNClassifier(BaseClassifier):
         self.optimizer = torch.optim.Adam(self.nnet.parameters())
 
     def save_model(self, filepath):
-        parameters = dict()
-        parameters['gru'] = dict()
-        parameters['linear'] = dict()
-        gru_dict = self.nnet.gru.state_dict()
-        for param_gru in gru_dict:
-            parameters['gru'][param_gru] = gru_dict[param_gru]
-        linear_dict = self.nnet.linear.state_dict()
-        for param_linear in linear_dict:
-            parameters['linear'][param_linear] = linear_dict[param_linear]
         with open(filepath, 'wb') as file:
-            pickle.dump(parameters, file)
+            torch.save(self.nnet.state_dict(), file)
+
+    def load_model(self, filepath):
+        self.nnet = RNN(self.vectors, self.amount_of_words,
+                        n_of_classes=self.n_of_classes,
+                        num_layers=self.num_layers,
+                        bidirectional=self.bidirectional).to(self.device)
+        self.nnet.load_state_dict(torch.load(filepath, map_location=self.device))
 
 
 class DBERTClassifier(BaseClassifier):
@@ -321,13 +333,16 @@ class DBERTClassifier(BaseClassifier):
         self.tokenizer = DistilBertTokenizer.from_pretrained('DeepPavlov/distilrubert-small-cased-conversational',
                                                              do_lower_case=True)
 
-    def batch_generator(self, tokens, labels):
+    def batch_generator(self, tokens, labels=None):
         for i in range(0, len(tokens), self.batch_size):
             batch_tokens = tokens[i: i + self.batch_size]
             batch_tokens = [' '.join(s) for s in batch_tokens]
-            batch_labels = torch.tensor(labels.values[i: i + self.batch_size],
-                                        dtype=torch.long,
-                                        device=self.device)
+            if labels:
+                batch_labels = torch.tensor(labels.values[i: i + self.batch_size],
+                                            dtype=torch.long,
+                                            device=self.device)
+            else:
+                batch_labels = None
             if len(batch_tokens) == 1:
                 inputs = self.tokenizer.encode_plus(
                     batch_tokens,
@@ -401,6 +416,7 @@ class DBERTClassifier(BaseClassifier):
                 if self.print_test:
                     test_pred_prob = torch.tensor([], device='cpu')
                     with torch.no_grad():
+                        self.nnet.eval()
                         for batch in test_batches:
                             test_batch_pred_prob = self.nnet(batch['tokens'], batch['mask'], batch['token_type_ids'])
                             test_batch_pred_prob_cpu = test_batch_pred_prob.to('cpu')
@@ -418,6 +434,7 @@ class DBERTClassifier(BaseClassifier):
         batches = self.batch_generator(tokens, labels)
         pred_probas = torch.tensor([], device=self.device)
         with torch.no_grad():
+            self.nnet.eval()
             for batch in batches:
                 batch_prob = self.nnet(batch['tokens'], batch['mask'],
                                        batch['token_type_ids'])
@@ -428,13 +445,8 @@ class DBERTClassifier(BaseClassifier):
         return np.argmax(self.predict_proba(tokens, labels), axis=1)
 
     def save_model(self, filepath):
-        parameters = dict()
-        parameters['linear'] = dict()
-        linear_dict = self.nnet.linear.state_dict()
-        for param_linear in linear_dict:
-            parameters['linear'][param_linear] = linear_dict[param_linear]
         with open(filepath, 'wb') as file:
-            pickle.dump(parameters, file)
+            torch.save(self.nnet.state_dict(), file)
 
 
 class AdsClassifierNN(nn.Module):
@@ -449,10 +461,10 @@ class AdsClassifierNN(nn.Module):
         weights_sex_path = os.path.join(weights_folder, 'model_sex.pt')
         weights_limit_path = os.path.join(weights_folder, 'model_limit.pt')
 
-        weights_limit = torch.load(weights_limit_path, map_location=device)
         weights_nationality = torch.load(weights_nationality_path, map_location=device)
         weights_families = torch.load(weights_families_path, map_location=device)
         weights_sex = torch.load(weights_sex_path, map_location=device)
+        weights_limit = torch.load(weights_limit_path, map_location=device)
 
         dim = weights_limit['emb']['weight'].shape[1]
         num_layers = 1
@@ -590,14 +602,15 @@ class AdClassifier:
                        'sex': torch.tensor([], device=self.device),
                        'limit': torch.tensor([], device=self.device)}
         with torch.no_grad():
+            self.nn.eval()
             for batch in batches:
                 batch_probas = self.nn(batch['tokens'], batch['mask'], batch['tokens_rnn'])
                 for batch_prob_label in batch_probas:
                     pred_probas[batch_prob_label] = torch.cat((pred_probas[batch_prob_label],
                                                                batch_probas[batch_prob_label]))
-                for pred_prob_label in pred_probas:
-                    pred_probas[pred_prob_label] = F.softmax(pred_probas[pred_prob_label]). \
-                        detach().cpu().numpy()
+            for pred_prob_label in pred_probas:
+                pred_probas[pred_prob_label] = F.softmax(pred_probas[pred_prob_label]).\
+                    detach().cpu().numpy()
         return pred_probas
 
     def save_model(self, filepath):
