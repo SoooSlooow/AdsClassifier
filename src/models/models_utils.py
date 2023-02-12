@@ -311,7 +311,10 @@ class RNNClassifier(BaseClassifier):
         with open(filepath, 'wb') as file:
             torch.save(self.nnet.state_dict(), file)
 
-    def load_model(self, filepath):
+    def load_model(self, filepath, amount_of_words):
+        self.amount_of_words = amount_of_words
+        self.vectors = np.zeros((amount_of_words, 300))
+        self.n_of_classes = 2
         self.nnet = RNN(self.vectors, self.amount_of_words,
                         n_of_classes=self.n_of_classes,
                         num_layers=self.num_layers,
@@ -448,67 +451,15 @@ class DBERTClassifier(BaseClassifier):
         with open(filepath, 'wb') as file:
             torch.save(self.nnet.state_dict(), file)
 
-
-class AdsClassifierNN(nn.Module):
-
-    def __init__(self, weights_folder):
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-        super().__init__()
-
-        weights_nationality_path = os.path.join(weights_folder, 'model_nationality.pt')
-        weights_families_path = os.path.join(weights_folder, 'model_families.pt')
-        weights_sex_path = os.path.join(weights_folder, 'model_sex.pt')
-        weights_limit_path = os.path.join(weights_folder, 'model_limit.pt')
-
-        weights_nationality = torch.load(weights_nationality_path, map_location=device)
-        weights_families = torch.load(weights_families_path, map_location=device)
-        weights_sex = torch.load(weights_sex_path, map_location=device)
-        weights_limit = torch.load(weights_limit_path, map_location=device)
-
-        dim = weights_limit['emb']['weight'].shape[1]
-        num_layers = 1
-        bidirectional = True
-        d = 2 if bidirectional else 1
-
-        self.emb = nn.Embedding(weights_limit['emb']['weight'].shape[0], dim)
-        self.emb.load_state_dict(weights_limit['emb'])
-        self.gru = nn.GRU(input_size=dim, hidden_size=dim, batch_first=True,
-                          num_layers=num_layers, bidirectional=bidirectional)
-        self.gru.load_state_dict(weights_limit['gru'])
-        self.linear_limit = nn.Linear(dim * num_layers * d, 2)
-        self.linear_limit.load_state_dict(weights_limit['linear'])
-
-        self.dbert = DistilBertModel.from_pretrained('DeepPavlov/distilrubert-small-cased-conversational')
-        self.linear_nationality = nn.Linear(768, 2)
-        self.linear_nationality.load_state_dict(weights_nationality['linear'])
-        self.linear_families = nn.Linear(768, 2)
-        self.linear_families.load_state_dict(weights_families['linear'])
-        self.linear_sex = nn.Linear(768, 2)
-        self.linear_sex.load_state_dict(weights_sex['linear'])
-
-    def forward(self, input_ids, attention_mask, input_ids_rnn):
-        dbert_output = self.dbert(input_ids=input_ids, attention_mask=attention_mask)
-        hidden_state = dbert_output[0]
-        pooler = hidden_state[:, 0]
-        output_nationality = self.linear_nationality(pooler)
-        output_families = self.linear_families(pooler)
-        output_sex = self.linear_sex(pooler)
-
-        emb = self.emb(input_ids_rnn)
-        _, last_state = self.gru(emb)
-        last_state = torch.permute(last_state, (1, 0, 2)).reshape(1, input_ids.shape[0], -1).squeeze()
-        output_limit = self.linear_limit(last_state.squeeze())
-        if len(output_limit.size()) == 1:
-            output_limit = output_limit.unsqueeze(0)
-
-        res = {
-            'nationality': output_nationality,
-            'families': output_families,
-            'sex': output_sex,
-            'limit': output_limit
-        }
-        return res
+    def load_model(self, filepath):
+        self.n_of_classes = 2
+        self.nnet = DistilBERTClass(self.n_of_classes).to(self.device)
+        self.optimizer = torch.optim.Adam(self.nnet.parameters(), lr=2e-6)
+        self.tokenizer = DistilBertTokenizer.from_pretrained(
+            'DeepPavlov/distilrubert-small-cased-conversational',
+            do_lower_case=True
+        )
+        self.nnet.load_state_dict(torch.load(filepath, map_location=self.device))
 
 
 class AdClassifier:
@@ -516,19 +467,35 @@ class AdClassifier:
     def __init__(self, weights_folder, dictionary_path):
         self.batch_size = 16
 
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        self.pad_idx = 0
+        self.unk_idx = 1
+
         with open(dictionary_path, 'rb') as file:
             self.word_to_idx = pickle.load(file)
 
-        self.unk_idx = 1
-        self.pad_idx = 0
-
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-        self.nn = AdsClassifierNN(weights_folder)
         self.tokenizer = DistilBertTokenizer.from_pretrained(
             'DeepPavlov/distilrubert-small-cased-conversational',
             do_lower_case=True
         )
+
+        nationality_nn_path = os.path.join(weights_folder, 'model_nationality.pt')
+        families_nn_path = os.path.join(weights_folder, 'model_families.pt')
+        sex_nn_path = os.path.join(weights_folder, 'model_sex.pt')
+        limit_nn_path = os.path.join(weights_folder, 'model_limit.pt')
+
+        self.nationality_clf = DBERTClassifier()
+        self.nationality_clf.load_model(nationality_nn_path)
+
+        self.families_clf = DBERTClassifier()
+        self.families_clf.load_model(families_nn_path)
+
+        self.sex_clf = DBERTClassifier()
+        self.sex_clf.load_model(sex_nn_path)
+
+        self.limit_clf = RNNClassifier(bidirectional=True)
+        self.limit_clf.load_model(limit_nn_path, amount_of_words=len(self.word_to_idx))
 
     def index_tokens(self, tokens_string):
         return [self.word_to_idx.get(token, self.unk_idx) for token in tokens_string]
@@ -601,10 +568,20 @@ class AdClassifier:
                        'families': torch.tensor([], device=self.device),
                        'sex': torch.tensor([], device=self.device),
                        'limit': torch.tensor([], device=self.device)}
+        batch_probas = dict()
         with torch.no_grad():
-            self.nn.eval()
+            self.nationality_clf.nnet.eval()
+            self.families_clf.nnet.eval()
+            self.sex_clf.nnet.eval()
+            self.limit_clf.nnet.eval()
             for batch in batches:
-                batch_probas = self.nn(batch['tokens'], batch['mask'], batch['tokens_rnn'])
+                batch_probas['nationality'] = self.nationality_clf.nnet(batch['tokens'], batch['mask'],
+                                                                        batch['token_type_ids'])
+                batch_probas['families'] = self.families_clf.nnet(batch['tokens'], batch['mask'],
+                                                                  batch['token_type_ids'])
+                batch_probas['sex'] = self.sex_clf.nnet(batch['tokens'], batch['mask'],
+                                                        batch['token_type_ids'])
+                batch_probas['limit'] = self.limit_clf.nnet(batch['tokens_rnn'])
                 for batch_prob_label in batch_probas:
                     pred_probas[batch_prob_label] = torch.cat((pred_probas[batch_prob_label],
                                                                batch_probas[batch_prob_label]))
@@ -615,4 +592,4 @@ class AdClassifier:
 
     def save_model(self, filepath):
         with open(filepath, 'wb') as file:
-            pickle.dump(self, file)
+            torch.save(self, file)
