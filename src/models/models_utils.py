@@ -590,6 +590,19 @@ class AdClassifier:
                     detach().cpu().numpy()
         return pred_probas
 
+    def predict_labels(self, tokens):
+        predicted_probas = self.predict_probas(tokens)
+        predicted_labels = dict()
+        thresholds = {
+            'nationality': 0.75,
+            'families': 0.7,
+            'sex': 0.25,
+            'limit': 0.42
+        }
+        for label in predicted_probas:
+            predicted_labels[label] = predicted_probas[label][:, 1] >= thresholds[label]
+        return predicted_labels
+
     def save_model(self, filepath):
         with open(filepath, 'wb') as file:
             torch.save(self, file)

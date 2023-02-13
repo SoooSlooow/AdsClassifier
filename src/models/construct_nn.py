@@ -1,5 +1,6 @@
-from src.models.models_utils import AdClassifier
 import click
+
+from src.models.models_utils import AdClassifier
 
 
 @click.command()
