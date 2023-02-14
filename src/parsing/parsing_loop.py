@@ -1,4 +1,4 @@
-from src.parsing_utils import read_json_params, rewrite_json_params
+from src.parsing.parsing_utils import read_json_params, rewrite_json_params
 import os
 
 params = read_json_params()

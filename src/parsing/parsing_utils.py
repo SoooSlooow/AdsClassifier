@@ -2,6 +2,7 @@ import json
 
 PARAMS_PATH = 'params.json'
 
+
 def read_json_params():
     with open(PARAMS_PATH, 'r') as params_file:
         params = json.load(params_file)
