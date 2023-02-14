@@ -521,25 +521,14 @@ class AdClassifier:
         for i in range(0, len(tokens), self.batch_size):
             batch_tokens = tokens[i: i + self.batch_size]
             batch_tokens = [' '.join(s) for s in batch_tokens]
-            if len(batch_tokens) == 1:
-                inputs = self.tokenizer.encode_plus(
-                    batch_tokens,
-                    None,
-                    add_special_tokens=True,
-                    max_length=512,
-                    truncation=True,
-                    pad_to_max_length=True,
-                    return_token_type_ids=True
-                )
-            else:
-                inputs = self.tokenizer.batch_encode_plus(
-                    batch_tokens,
-                    add_special_tokens=True,
-                    max_length=512,
-                    truncation=True,
-                    pad_to_max_length=True,
-                    return_token_type_ids=True
-                )
+            inputs = self.tokenizer.batch_encode_plus(
+                batch_tokens,
+                add_special_tokens=True,
+                max_length=512,
+                truncation=True,
+                pad_to_max_length=True,
+                return_token_type_ids=True
+            )
             batch_token_ids = torch.tensor(inputs['input_ids'], device=self.device, dtype=torch.long)
             batch_mask = torch.tensor(inputs['attention_mask'], device=self.device, dtype=torch.long)
             batch_token_type_ids = torch.tensor(inputs['token_type_ids'], device=self.device, dtype=torch.long)
@@ -548,12 +537,6 @@ class AdClassifier:
             batch_tokens_rnn_ids = torch.tensor(self.as_matrix(batch_tokens_rnn),
                                                 dtype=torch.int,
                                                 device=self.device)
-
-            if len(batch_tokens) == 1:
-                batch_token_ids = batch_token_ids.unsqueeze(0)
-                batch_mask = batch_mask.unsqueeze(0)
-                batch_token_type_ids = batch_token_type_ids.unsqueeze(0)
-                batch_tokens_rnn_ids = torch.unsqueeze(batch_tokens_rnn_ids, 0)
             batch = {
                 'tokens': batch_token_ids,
                 'mask': batch_mask,
