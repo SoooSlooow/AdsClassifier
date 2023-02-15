@@ -1,0 +1,5 @@
+outs:
+- md5: 530bd8d409dc832f5fbaad48475406e5.dir
+  size: 2000994744
+  nfiles: 4
+  path: full_weights_pt

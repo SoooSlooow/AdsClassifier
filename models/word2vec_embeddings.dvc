@@ -1,0 +1,5 @@
+outs:
+- md5: bf22eb98fa07ec83dd20cfddc48c93d6.dir
+  size: 1360636346
+  nfiles: 1
+  path: word2vec_embeddings

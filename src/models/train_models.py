@@ -91,6 +91,6 @@ if __name__ == "__main__":
 
 
 """
-python -m src.models.train_models models/weights/test data/processed/train
+python -m src.models.train_models models/weights/train_weights_pt data/processed/train
 """
 

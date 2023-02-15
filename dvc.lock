@@ -1,0 +1,41 @@
+schema: '2.0'
+stages:
+  preprocess_data:
+    cmd: python -m src.data.preprocess_data data/raw/labeled_texts_fixed.csv data/processed
+      nationality families sex limit
+    deps:
+    - path: data/raw/labeled_texts_fixed.csv
+      md5: 08aaaa6162d95dfcd5f07b7cafc3115a
+      size: 10626313
+    outs:
+    - path: data/processed
+      md5: b951a1fbab75b6236de9814eceeaf342.dir
+      size: 90122144
+      nfiles: 12
+  train_models:
+    cmd: python -m src.models.train_models models/weights/train_weights_pt data/processed/train
+    deps:
+    - path: data/processed/train
+      md5: e364db6b601ccb67b5e773115e000ec2.dir
+      size: 36021272
+      nfiles: 4
+    outs:
+    - path: models/weights/train_weights_pt
+      md5: 2f17892e987eab84426d3dce3cade90c.dir
+      size: 2000994744
+      nfiles: 4
+  construct_nn:
+    cmd: python -m src.models.construct_nn models/weights/train_weights_pt models/word_to_idx_dict.pkl
+      models/nnets/nnet_train.pkl
+    deps:
+    - path: models/weights/train_weights_pt
+      md5: 2f17892e987eab84426d3dce3cade90c.dir
+      size: 2000994744
+      nfiles: 4
+    - path: models/word_to_idx_dict.pkl
+      md5: 744eaa808d7c4dd6d0c6fbfecc2279af
+      size: 19380176
+    outs:
+    - path: models/nnets/nnet_train.pt
+      md5: d9723ab58a71861d0c5145d98ff79c32
+      size: 3474673281

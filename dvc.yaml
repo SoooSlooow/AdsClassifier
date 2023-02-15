@@ -1,0 +1,25 @@
+stages:
+
+  preprocess_data:
+    cmd: python -m src.data.preprocess_data
+      data/raw/labeled_texts_fixed.csv data/processed nationality families sex limit
+    deps:
+      - data/raw/labeled_texts_fixed.csv
+    outs:
+      - data/processed
+
+  train_models:
+    cmd: python -m src.models.train_models models/weights/train_weights_pt data/processed/train
+    deps:
+      - data/processed/train
+    outs:
+      - models/weights/train_weights_pt
+
+  construct_nn:
+    cmd: python -m src.models.construct_nn
+      models/weights/train_weights_pt models/word_to_idx_dict.pkl models/nnets/nnet_train.pkl
+    deps:
+      - models/weights/train_weights_pt
+      - models/word_to_idx_dict.pkl
+    outs:
+      - models/nnets/nnet_train.pt

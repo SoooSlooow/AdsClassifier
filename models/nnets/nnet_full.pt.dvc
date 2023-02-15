@@ -1,0 +1,4 @@
+outs:
+- md5: b6c9c5d0b0879aedc6d8f5d559ef02ff
+  size: 3474673281
+  path: nnet_full.pt
